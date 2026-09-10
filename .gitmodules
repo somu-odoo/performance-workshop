@@ -1,0 +1,4 @@
+[submodule "somu-odoo/masterclass-oxp"]
+	path = somu-odoo/masterclass-oxp
+	url = git@github.com:somu-odoo/masterclass-oxp.git
+	branch = sh-masterclass-oxp-jcha
