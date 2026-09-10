@@ -1,4 +1,5 @@
-from odoo import models, fields, api
+from odoo import models, fields, api, _
+from odoo.exceptions import ValidationError
 
 class SaleOrder(models.Model):
     _inherit = 'sale.order'
@@ -21,7 +22,39 @@ class SaleOrder(models.Model):
                         order.full_client_title = order.partner_id.name if order.partner_id else ''
                     
 
+    def _is_fully_paid(self):
+        """Return True if all posted customer invoices for this order are fully paid."""
+        self.ensure_one()
+        invoices = self.invoice_ids.filtered(
+            lambda inv: inv.state == 'posted' and inv.move_type == 'out_invoice'
+        )
+        if not invoices:
+            return False
+        return all(inv.payment_state in ('paid', 'in_payment') for inv in invoices)
+
+    def _check_discount_limit(self):
+        """Raise a ValidationError if any order line has a discount above 15%
+        and the current user is not a Sales Manager."""
+        if self.env.user.has_group('sales_team.group_sale_manager'):
+            return
+        for order in self:
+            for line in order.order_line:
+                if line.discount > 15:
+                    raise ValidationError(
+                        _(
+                            "Order %(order)s cannot be confirmed: line %(sequence)s"
+                            " – %(product)s – has a %(discount)s%% discount,"
+                            " which exceeds the 15%% limit allowed for salespeople.\n"
+                            "Please reduce the discount or ask a Sales Manager to confirm the order.",
+                            order=order.name,
+                            sequence=line.sequence,
+                            product=line.product_id.display_name or line.name,
+                            discount=line.discount,
+                        )
+                    )
+
     def action_confirm(self):
+        self._check_discount_limit()
         for record in self:
             SaleOrders = self.env['sale.order'].search([])
             Partners = self.env['res.partner'].search([])
